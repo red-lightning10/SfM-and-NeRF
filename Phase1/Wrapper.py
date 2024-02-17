@@ -91,12 +91,12 @@ def main():
     # Read images
     images = []
     image_paths = glob.glob(os.path.join(os.path.join(path, 'Data'), '*.png'))
- 
+    image_paths = sorted(image_paths)
     for i in range(len(image_paths)):
         img = cv2.imread(image_paths[i])
         images.append(img)
     print(np.shape(images))
-    image_paths = sorted(image_paths)
+
     print(image_paths)
     print(descriptor_files)
     # Read feature descriptors
@@ -107,15 +107,11 @@ def main():
     print(feature_matches)
     for i in range(len(descriptor_files)):
         feature_matches = ReadFeatureDescriptors(descriptor_files[i], feature_matches, i)
-        # print(feature_matches[i + 1])
         print(feature_matches[i + 1].keys())
         for j in range(i + 1, len(image_paths)):
             result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
             print(i+1, j+1)
             cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
-        # feature_descriptors.append(feature_descriptor)
-        # print(feature_descriptors)
-    print(np.shape(feature_matches[1][2]))
-    
+
 if __name__ == "__main__":
     main()
