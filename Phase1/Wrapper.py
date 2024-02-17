@@ -85,10 +85,10 @@ def EstimateFundamentalMatrix(matches_array):
     _, _, V = np.linalg.svd(A)
     F = (np.transpose(V)[:, -1]).reshape(3, 3)
 
-    # U, S, V = np.linalg.svd(F)
-    # S = np.diag(S)
-    # S[2,2] = 0
-    # F = np.dot(U, np.dot(S, V))
+    U, S, V = np.linalg.svd(F)
+    S = np.diag(S)
+    S[2,2] = 0
+    F = np.dot(U, np.dot(S, V))
     return F
     
 
@@ -107,8 +107,6 @@ def GetInlierRANSAC(matches, threshold, nIterations):
 
         F = EstimateFundamentalMatrix(matches_array[choices])
 
-        # print(F)
-        # matches_array_homogenized = np.concatenate((matches_array, np.ones((len(matches_array), 1))), axis=1)
         x2 = np.concatenate((matches_array[:, 1, :], np.ones((len(matches_array), 1))), axis=1)
         x1 = np.concatenate((matches_array[:, 0, :], np.ones((len(matches_array), 1))), axis=1)
 
@@ -118,7 +116,6 @@ def GetInlierRANSAC(matches, threshold, nIterations):
         if num_inliers > num_max_inliers:
 
             inliers_indices = np.where(inliers_check)
-            # print(inliers_indices)
             num_max_inliers = num_inliers
 
     inliers = matches_array[inliers_indices]
@@ -151,10 +148,6 @@ def main():
     for i in range(len(image_paths)):
         img = cv2.imread(image_paths[i])
         images.append(img)
-    print(np.shape(images))
-
-    print(image_paths)
-    print(descriptor_files)
     # Read feature descriptors
     feature_descriptors = []
     #create nested dictionary for feature matches
@@ -162,10 +155,8 @@ def main():
 
     for i in range(len(descriptor_files)):
         feature_matches = ReadFeatureDescriptors(descriptor_files[i], feature_matches, i)
-        print(feature_matches[i + 1].keys())
         for j in range(i + 1, len(image_paths)):
             result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
-            print(i+1, j+1)
             cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
 
             #RANSAC filtering
@@ -174,6 +165,8 @@ def main():
             RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches)
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
             F = EstimateFundamentalMatrix(filtered_matches)
+            
+            print(np.linalg.matrix_rank(F))
             print(F)
 
 if __name__ == "__main__":
