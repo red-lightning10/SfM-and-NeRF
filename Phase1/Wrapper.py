@@ -4,7 +4,7 @@ import os
 import sys
 import glob
 from matplotlib import pyplot as plt
-
+from EssentialMatrixFromFundamentalMatrix import EfromF
 def create_feature_match_dict(n):
     feature_matches = {}
     for i in range(1, n):
@@ -128,7 +128,7 @@ def main():
     calibration_file = os.path.join(os.path.join(path, 'Data'), 'calibration.txt')
     # print(calibration_file)
     K = ReadCalibrationFile(calibration_file)
-
+    print(K)
     results_path = os.path.join(path, "Results")
     if not os.path.exists(results_path):
         os.makedirs(results_path)
@@ -165,9 +165,9 @@ def main():
             RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches)
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
             F = EstimateFundamentalMatrix(filtered_matches)
-            
+            E = EfromF(F,K)
             print(np.linalg.matrix_rank(F))
-            print(F)
+            print(E)
 
 if __name__ == "__main__":
     main()
