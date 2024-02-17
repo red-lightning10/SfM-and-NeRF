@@ -61,12 +61,68 @@ def plot_feature_correspondences(source, target, matches):
         target_y = int(match[1][1])
         cv2.circle(concatenated_image, (source_x, source_y), 2, (0, 0, 255), -1)
         cv2.circle(concatenated_image, (target_x, target_y), 2, (0, 0, 255), -1)
-        # cv2.line(concatenated_image, (source_x, source_y), (target_x, target_y), (0, 255, 0), 1)
+        cv2.line(concatenated_image, (source_x, source_y), (target_x, target_y), (0, 255, 0), 1)
     
     return concatenated_image
-# def EstimateFundamentalMatrix():
 
-# def GetInlierRANSAC():
+def EstimateFundamentalMatrix(matches_array):
+
+    A = []
+    if len(matches_array) < 8 or len(matches_array) < 8: 
+        print("Fundamental Matrix needs more sets of points. Aborting.")
+        return A
+    
+    x = matches_array[:, 0, 0]
+    y = matches_array[:, 0, 1]
+    xm = matches_array[:, 1, 0]
+    ym = matches_array[:, 1, 1]
+
+    # choices = np.random.choice(np.arange(len(matches)), 8, replace=False)
+    for i in range(len(x)):
+
+        A.append([x[i]*xm[i], x[i]*ym[i], x[i], y[i]*xm[i], y[i]*ym[i], y[i], xm[i], ym[i], 1])
+
+    _, _, V = np.linalg.svd(A)
+    F = (np.transpose(V)[:, -1]).reshape(3, 3)
+
+    # U, S, V = np.linalg.svd(F)
+    # S = np.diag(S)
+    # S[2,2] = 0
+    # F = np.dot(U, np.dot(S, V))
+    return F
+    
+
+def GetInlierRANSAC(matches, threshold, nIterations):
+
+    A = []
+    if len(matches) < 8 or len(matches) < 8: 
+        print("Operation needs more sets of points. Aborting.")
+        return A
+
+    num_max_inliers = 0
+    inliers = []
+    for i in range(nIterations):
+        choices = np.random.choice(np.arange(len(matches)), 8, replace=False)
+        matches_array = np.array(matches)
+
+        F = EstimateFundamentalMatrix(matches_array[choices])
+
+        # print(F)
+        # matches_array_homogenized = np.concatenate((matches_array, np.ones((len(matches_array), 1))), axis=1)
+        x2 = np.concatenate((matches_array[:, 1, :], np.ones((len(matches_array), 1))), axis=1)
+        x1 = np.concatenate((matches_array[:, 0, :], np.ones((len(matches_array), 1))), axis=1)
+
+        inliers_check = [np.abs(np.dot(x1[j], np.dot(F, x2[j]))) < threshold for j in range(len(matches))]
+        num_inliers = np.sum(inliers_check)
+
+        if num_inliers > num_max_inliers:
+
+            inliers_indices = np.where(inliers_check)
+            # print(inliers_indices)
+            num_max_inliers = num_inliers
+
+    inliers = matches_array[inliers_indices]
+    return inliers
 
 
 def main():
@@ -104,7 +160,6 @@ def main():
     #create nested dictionary for feature matches
     feature_matches = create_feature_match_dict(len(image_paths))
 
-    print(feature_matches)
     for i in range(len(descriptor_files)):
         feature_matches = ReadFeatureDescriptors(descriptor_files[i], feature_matches, i)
         print(feature_matches[i + 1].keys())
@@ -112,6 +167,14 @@ def main():
             result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
             print(i+1, j+1)
             cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
+
+            #RANSAC filtering
+            filtered_matches = GetInlierRANSAC(feature_matches[i + 1][j + 1], 1e-5, 1000)
+
+            RANSAC_result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
+            cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
+            F = EstimateFundamentalMatrix(filtered_matches)
+            print(F)
 
 if __name__ == "__main__":
     main()
