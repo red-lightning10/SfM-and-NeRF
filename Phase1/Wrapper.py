@@ -110,7 +110,7 @@ def GetInlierRANSAC(matches, threshold, nIterations):
         x2 = np.concatenate((matches_array[:, 1, :], np.ones((len(matches_array), 1))), axis=1)
         x1 = np.concatenate((matches_array[:, 0, :], np.ones((len(matches_array), 1))), axis=1)
 
-        inliers_check = [np.abs(np.dot(x1[j], np.dot(F, x2[j]))) < threshold for j in range(len(matches))]
+        inliers_check = [np.abs(np.dot(x2[j], np.dot(F, np.transpose(x1[j])))) < threshold for j in range(len(matches))]
         num_inliers = np.sum(inliers_check)
 
         if num_inliers > num_max_inliers:
@@ -160,7 +160,7 @@ def main():
             cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
 
             #RANSAC filtering
-            filtered_matches = GetInlierRANSAC(feature_matches[i + 1][j + 1], 1e-3, 1000)
+            filtered_matches = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
 
             RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches)
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
