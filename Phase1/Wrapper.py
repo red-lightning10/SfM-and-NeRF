@@ -5,6 +5,8 @@ import sys
 import glob
 from matplotlib import pyplot as plt
 from EssentialMatrixFromFundamentalMatrix import EfromF
+from ExtractCameraPose import get_cam_pose  
+
 def create_feature_match_dict(n):
     feature_matches = {}
     for i in range(1, n):
@@ -44,10 +46,7 @@ def ReadFeatureDescriptors(descriptor_file, feature_matches, i):
                 current_matches = list(feature_matches.get(image1_id).get(image2_id))
                 current_matches.append((image1_kp, image2_kp))
                 feature_matches[image1_id][image2_id] = current_matches
-                # print(image1_id, image2_id, image1_kp, image2_kp)
-        # print(lines)
-        # feature_descriptors = np.array(lines, dtype=np.float32)
-    # print(feature_matches)
+
     return feature_matches
 
 def plot_feature_correspondences(source, target, matches):
@@ -77,7 +76,6 @@ def EstimateFundamentalMatrix(matches_array):
     xm = matches_array[:, 1, 0]
     ym = matches_array[:, 1, 1]
 
-    # choices = np.random.choice(np.arange(len(matches)), 8, replace=False)
     for i in range(len(x)):
 
         A.append([x[i]*xm[i], x[i]*ym[i], x[i], y[i]*xm[i], y[i]*ym[i], y[i], xm[i], ym[i], 1])
@@ -166,8 +164,8 @@ def main():
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
             F = EstimateFundamentalMatrix(filtered_matches)
             E = EfromF(F,K)
-            print(np.linalg.matrix_rank(F))
-            print(E)
+            C, R = get_cam_pose(E)
+
 
 if __name__ == "__main__":
     main()
