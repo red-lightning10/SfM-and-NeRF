@@ -6,6 +6,6 @@ def EfromF(F,K):
     U,D,V = np.linalg.svd(E)
 
     D = np.diag([1,1,0])
-    final_E =  np.dot(U.T,(np.dot(D,V)))
+    final_E =  np.dot(U,(np.dot(D,V)))
 
     return final_E
