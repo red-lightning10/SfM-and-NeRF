@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 from EssentialMatrixFromFundamentalMatrix import EfromF
 from ExtractCameraPose import get_cam_pose
 from LinearTriangulation import triangulation
+from DisambiguateCameraPose import DisambiguateCameraPose
 def create_feature_match_dict(n):
     feature_matches = {}
     for i in range(1, n):
@@ -163,15 +164,20 @@ def main():
 
             #RANSAC filtering
             filtered_matches = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
-            print(np.shape(filtered_matches))
             RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches)
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
             F = EstimateFundamentalMatrix(filtered_matches)
             E = EfromF(F,K)
             C,R = get_cam_pose(E)
-            x = triangulation(K,C,R,filtered_matches)
-            print(np.linalg.matrix_rank(F))
-            print(E)
+            C0 = np.zeros((3,1))
+            R0 = np.eye(3)
+            X =[]
+            for Ci,Ri in zip(C,R):
+                x = triangulation(K,C0,R0,Ci,Ri,filtered_matches)
+                X.append(x)
+            final_R,final_C = DisambiguateCameraPose(C,R,X)
+            print(final_C)
+            print(final_R)
 
 if __name__ == "__main__":
     main()

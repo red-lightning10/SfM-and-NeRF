@@ -11,12 +11,11 @@ def homogenize(x):
     X = np.concatenate((x,np.ones((x.shape[0],1))),axis=1)
     return X
 
-def triangulation(K,C,R,V):
-    c1 = np.reshape(C[0],(3,1))
-    c2 = np.reshape(C[1],(3,1))
-    print(np.shape(c1))
-    r1 = np.array(R[0])
-    r2 = np.array(R[1])
+def triangulation(K,C_ref,R_ref,C,R,V):
+    c1 = np.reshape(C_ref,(3,1))
+    c2 = np.reshape(C,(3,1))
+    r1 = np.array(R_ref)
+    r2 = np.array(R)
     v1 = V[:, 0, :]
     v2 = V[:, 1, :]
     v1 = homogenize(v1)
