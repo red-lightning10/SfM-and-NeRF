@@ -5,7 +5,10 @@ import sys
 import glob
 from matplotlib import pyplot as plt
 from EssentialMatrixFromFundamentalMatrix import EfromF
-from ExtractCameraPose import get_cam_pose  
+from ExtractCameraPose import get_cam_pose
+from LinearTriangulation import LinearTriangulation
+from DisambiguateCameraPose import DisambiguateCameraPose
+from NonLinearTriangulation import NonLinearTriangulation
 
 def create_feature_match_dict(n):
     feature_matches = {}
@@ -46,7 +49,10 @@ def ReadFeatureDescriptors(descriptor_file, feature_matches, i):
                 current_matches = list(feature_matches.get(image1_id).get(image2_id))
                 current_matches.append((image1_kp, image2_kp))
                 feature_matches[image1_id][image2_id] = current_matches
-
+                # print(image1_id, image2_id, image1_kp, image2_kp)
+        # print(lines)
+        # feature_descriptors = np.array(lines, dtype=np.float32)
+    # print(feature_matches)
     return feature_matches
 
 def plot_feature_correspondences(source, target, matches):
@@ -76,6 +82,7 @@ def EstimateFundamentalMatrix(matches_array):
     xm = matches_array[:, 1, 0]
     ym = matches_array[:, 1, 1]
 
+    # choices = np.random.choice(np.arange(len(matches)), 8, replace=False)
     for i in range(len(x)):
 
         A.append([x[i]*xm[i], x[i]*ym[i], x[i], y[i]*xm[i], y[i]*ym[i], y[i], xm[i], ym[i], 1])
@@ -119,6 +126,45 @@ def GetInlierRANSAC(matches, threshold, nIterations):
     inliers = matches_array[inliers_indices]
     return inliers
 
+def get_epipole(F):
+    U, _, V = np.linalg.svd(F)
+    e1 = V[-1]
+    e2 = U[:,-1]
+
+    return e1/e1[-1], e2/e2[-1]
+
+def get_epipolar_lines(F, pts1, pts2):
+
+    lines_1 = [F.T @ np.array([pt[0], pt[1], 1]).T for pt in pts2]
+    lines_2 = [F @ np.array([pt[0], pt[1], 1]).T for pt in pts1]
+
+    return lines_1, lines_2
+
+def plot_epipolar_lines(img1, img2, F, pts1, pts2):
+
+    lines1, lines2 = get_epipolar_lines(F, pts1, pts2)
+    i1 = img1.copy()
+    i2 = img2.copy()
+    for l1, l2 in zip(lines1, lines2):
+        color = tuple(np.random.randint(0, 255, 3).tolist())
+        x0, x1 = 0, img1.shape[1]
+        y0 = int(-l1[2]/l1[1])
+        y1 = int((-l1[2] - l1[0]*x1)/l1[1])
+        i1 = cv2.line(i1, (x0, y0), (x1, y1), color, 1)
+
+        x0, x1 = 0, img2.shape[1]
+        y0 = int(-l2[2]/l2[1])
+        y1 = int((-l2[2] - l2[0]*x1)/l2[1])
+        i2 = cv2.line(i2, (x0, y0), (x1, y1), color, 1)
+
+    e1, e2 = get_epipole(F)
+    e1 = int(e1[0]), int(e1[1])
+    e2 = int(e2[0]), int(e2[1])
+    #plot a point at the epipole
+    i1 = cv2.circle(i1, e1, 3, (0, 0, 255), -1)
+    i2 = cv2.circle(i2, e2, 3, (0, 0, 255), -1)
+
+    return np.concatenate((i1, i2), axis = 1)
 
 def main():
     
@@ -146,8 +192,7 @@ def main():
     for i in range(len(image_paths)):
         img = cv2.imread(image_paths[i])
         images.append(img)
-    # Read feature descriptors
-    feature_descriptors = []
+
     #create nested dictionary for feature matches
     feature_matches = create_feature_match_dict(len(image_paths))
 
@@ -159,12 +204,30 @@ def main():
 
             #RANSAC filtering
             filtered_matches = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
-
             RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches)
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
             F = EstimateFundamentalMatrix(filtered_matches)
             E = EfromF(F,K)
-            C, R = get_cam_pose(E)
+            C,R = get_cam_pose(E)
+
+            plot_epipolar_result_img = plot_epipolar_lines(images[i], images[j], F, filtered_matches[:, 0, :], filtered_matches[:, 1, :])
+            cv2.imwrite(os.path.join(results_path, 'epipolar_lines' + str(i+1) + '_' + str(j+1) + '.png'), plot_epipolar_result_img)
+
+            C0 = np.zeros((3,1))
+            R0 = np.eye(3)
+
+            X_lt = []
+            print("fm", filtered_matches.shape)
+            for Ci, Ri in zip(C,R):
+                x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches)
+                print("x_lt", x_lt.shape)
+                X_lt.append(x_lt)
+        
+            C, R, X = DisambiguateCameraPose(C, R, X_lt)
+            X_nlt = NonLinearTriangulation(K, C0, R0, C, R, X, filtered_matches)
+            print(X.shape)
+            print(X_nlt.shape)
+
 
 
 if __name__ == "__main__":
