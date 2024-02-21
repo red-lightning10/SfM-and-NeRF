@@ -20,21 +20,26 @@ def triangulation(K,C_ref,R_ref,C,R,V):
     v2 = V[:, 1, :]
     v1 = homogenize(v1)
     v2 = homogenize(v2)
-    T1 = r1*c1
-    T2 = r2*c2
-    P1 = np.dot(K,np.dot(r1,np.hstack((np.identity(3),-c1))))
-    P2 = np.dot(K,np.dot(r2,np.hstack((np.identity(3),-c2))))
+    print(v1)
+    print(r2)
+    T1 = r1@c1
+    T2 = r2@c2
+    P1 = K@(np.hstack((r1,T1)))
+    P2 = K@(np.hstack((r2,T2)))
+    print(P1)
     X = []
     for p1,p2 in zip(v1,v2):
         a1 = skew(p1)@P1 # @ is cross product
         a2 = skew(p2)@P2
+        print(a1)
         A = np.vstack((a1,a2))
-
         U,D,VT = np.linalg.svd(A)
         x = VT[np.argmin(D),:]
+        print(x)
         x = x/x[3]
         x = x[0:3]
         x =np.array(x)
         X.append(x)
     X = np.vstack(X)
     return X
+

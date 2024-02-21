@@ -125,17 +125,21 @@ def GetInlierRANSAC(matches, threshold, nIterations):
     inliers = matches_array[inliers_indices]
     return inliers
 
-def plot_linear_triangles(image_number, P_matrix, K_matrix, image_points, world_points, string):
-    b = 'P3Data/%d.png'%image_number
-    img1 = cv.imread(b)
-    img = img1.copy()
-    for i in range(len(image_points)):
-        cv.circle(img, (int(image_points[i][0]),int(image_points[i][1])), 3, [0,0,255], 1)
-        x_proj = np.dot(np.dot(K_matrix, P_matrix), world_points[i])
-        x_proj = x_proj/x_proj[2]
-        cv.circle(img, (int(x_proj[0]), int(x_proj[1])), 2, [255,0,0], -1)
-    string = 'output_images/' + string + '.png'
-    cv.imwrite(string, img)
+def plot_linear_triangles(image,P,world_points):
+    x= (P[0,:]@ world_points.T) / (P[2,:]@world_points.T)
+    y = (P[1,:]@ world_points.T) / (P[2,:]@world_points.T)
+    x = np.reshape(x,(x.shape[0],1))
+    y = np.reshape(y,(y.shape[0],1))
+    print(np.shape(world_points[0]))
+    print(x)
+    #fig,ax=plt.subplots()
+    #ax.imshow(image)
+    #ax.scatter(x,y)
+    #plt.show()
+    for i in range(len(x)):
+        cv2.circle(image, (int(x[i]),int(y[i])), 2, (0, 0, 255), -1)
+    #f_image = cv2.circle(image, int(x,y), 2, (0, 0, 255), -1)
+    cv2.imwrite("image.png",image)
 
 def show_disambiguated_and_corrected_poses(X_linear,Xs_all_poses):
     plt.figure("camera disambiguation")
@@ -145,7 +149,7 @@ def show_disambiguated_and_corrected_poses(X_linear,Xs_all_poses):
 
     plt.figure("linear triangulation")
     plt.scatter(X_linear[:, 0], X_linear[:, 2], color='skyblue', marker='.')
-    plt.scatter(0, 0, marker='^', s=20)
+    #plt.scatter(0, 0, marker='^', s=20)
 
 
 def main():
@@ -178,7 +182,6 @@ def main():
     #create nested dictionary for feature matches
     feature_matches = create_feature_match_dict(len(image_paths))
     f_map =[]
-    F_mat = []
     for i in range(len(descriptor_files)):
         feature_matches = ReadFeatureDescriptors(descriptor_files[i], feature_matches, i)
         for j in range(i + 1, len(image_paths)):
@@ -186,22 +189,31 @@ def main():
             cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
 
             #RANSAC filtering
-            filtered_matches,F = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
+            filtered_matches = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
             f_map.append(filtered_matches)
-            F_mat.append(F)
             RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches)
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
+    #print(np.shape(f_map))
     F = EstimateFundamentalMatrix(f_map[0])
     E = EfromF(F,K)
     C,R = get_cam_pose(E)
     C0 = np.zeros((3,1))
     R0 = np.eye(3)
     X =[]
+    #feature_matches = ReadFeatureDescriptors(descriptor_files[0], feature_matches, 0)
     for Ci,Ri in zip(C,R):
-        x = triangulation(K,C0,R0,Ci,Ri,filtered_matches)
+        x = triangulation(K,C0,R0,Ci,Ri,f_map[0])
         X.append(x)
     final_C,final_R,final_X = DisambiguateCameraPose(C,R,X)
-    show_disambiguated_and_corrected_poses(final_X,X)
-    plt.show()
+    print(np.shape(final_X))
+    print(np.shape(X))
+    final_C = np.reshape(final_C,(3,1))
+    final_R = np.array(final_R)
+    T = final_R@final_C
+    P = K@(np.hstack((final_R,T)))
+    #show_disambiguated_and_corrected_poses(final_X,X)
+    one = np.ones((final_X.shape[0],1))
+    X_h = np.hstack((final_X,np.ones((final_X.shape[0],1))))
+    plot_linear_triangles(images[0],P,X_h)
 if __name__ == "__main__":
     main()
