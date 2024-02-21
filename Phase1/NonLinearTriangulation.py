@@ -23,6 +23,7 @@ def least_squares_fn(X, P1, P2, pt1, pt2):
     X_h = np.hstack((X, 1))
 
     u1, v1, u2, v2 = pt1[0], pt1[1], pt2[0], pt2[1]
+    print(u1, P1[0, :] @ X_h, P1[2, :] @ X_h)
 
     error1 = np.array([u1 - (P1[0, :] @ X_h) / (P1[2, :] @ X_h), 
                       v1 - (P1[1, :] @ X_h) / (P1[2, :] @ X_h)])
@@ -30,4 +31,5 @@ def least_squares_fn(X, P1, P2, pt1, pt2):
                       v2 - (P2[1, :] @ X_h) / (P2[2, :] @ X_h)])
 
     # return np.concatenate((error1**2, error2**2))
-    return error1**2 + error2**2
+    # print(error1**2 + error2**2)
+    return np.sum(error1**2 + error2**2)
