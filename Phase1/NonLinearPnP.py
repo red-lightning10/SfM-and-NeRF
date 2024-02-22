@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.optimize import least_squares
-from LinearTriangulation import create_projection_matrix
+from LinearTriangulation import create
 
 def quaternion_to_rotation_matrix(q):
     q = q / np.linalg.norm(q)
@@ -43,13 +43,7 @@ def least_squares_fn_pnp(params, X_3d, x_2d, K):
     q = params[0:4]
     C = params[4:]
     R = quaternion_to_rotation_matrix(q)
-    P = create_projection_matrix(K, C, R)
-    error = []
-    for i in range(len(X_3d)):
-        x_2d_proj = P @ np.hstack((X_3d[i], 1))
-        x_2d_proj = x_2d_proj / x_2d_proj[2, :]
-        x_2d_proj = x_2d_proj[0:2, :]
-        e = x_2d[:, i] - x_2d_proj
-        error.append(e**2)
-
-    return error
+    x_2d_hat = K @ (R @ X_3d + C.reshape(-1, 1))
+    x_2d_hat = x_2d_hat / x_2d_hat[2,:]
+    x_2d_hat = x_2d_hat[0:2,:]
+    return (x_2d - x_2d_hat).reshape(-1)
