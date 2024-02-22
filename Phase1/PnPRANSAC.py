@@ -4,6 +4,8 @@ import numpy as np
 
 def project_from_world_to_image(X, K, R, C):
 
+    print(R)
+    print(C.shape)
     P = create_projection_matrix(K, C, R)
     X_h = np.hstack((X, np.ones((X.shape[0], 1))))
     x = P @ X_h.T
@@ -33,7 +35,7 @@ def PnPRANSAC(X_3d, x_2d, K, threshold, nIterations=1000):
         # Solve PnP
         R, C = LinearPnP(x_sample, X_sample, K)
         # Project 3D points to 2D
-        x_2d_proj = project_from_world_to_image(X_3d, K, R, C)
+        x_2d_proj = project_from_world_to_image(X_3d, K, R, C.reshape(3,1))
         # Calculate reprojection error
         error = np.linalg.norm(x_2d - x_2d_proj, axis=1)
         # Count inliers
@@ -45,5 +47,8 @@ def PnPRANSAC(X_3d, x_2d, K, threshold, nIterations=1000):
             C_best = C
             R_best = R
     
-    inliers = X_3d[inliers_indices]
-    return R_best, C_best, inliers
+    X_3d_inliers = X_3d[inliers_indices]
+    x_2d_inliers = x_2d[inliers_indices]
+    R_best, C_best = LinearPnP(x_2d_inliers, X_3d_inliers, K)
+    
+    return R_best, C_best

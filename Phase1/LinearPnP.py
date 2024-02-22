@@ -29,7 +29,8 @@ def LinearPnP(x_2d, X_3d, K):
 
     U, S, VT_ = np.linalg.svd(R)
     R = U @ VT_
-    gamma = S[0, 0]
+    print(S)
+    gamma = S[0]
 
     T = K_inv @ P[:, 3]/gamma
 

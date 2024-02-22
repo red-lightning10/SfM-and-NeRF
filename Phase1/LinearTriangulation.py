@@ -13,6 +13,7 @@ def homogenize(x):
 
 def create_projection_matrix(K, C, R):
     T = R @ C
+    print(T.shape, R.shape, C.shape)
     P = K @ np.hstack((R, T))
     return P
 

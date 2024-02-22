@@ -9,7 +9,8 @@ from ExtractCameraPose import get_cam_pose
 from LinearTriangulation import LinearTriangulation
 from DisambiguateCameraPose import DisambiguateCameraPose
 from NonLinearTriangulation import NonLinearTriangulation
-from LinearPnP import LinearPnP
+from PnPRANSAC import PnPRANSAC
+from NonLinearPnP import NonLinearPnP
 
 def create_feature_match_dict(n):
     feature_matches = {}
@@ -236,7 +237,10 @@ def main():
     # PnP
     x_2d = filtered_matches_array[:, 1, :]
     X_3d = X_nlt
-    LinearPnP(x_2d, X_3d, K)
+    R, C = PnPRANSAC(X_3d, x_2d, K, threshold=20, nIterations=1000)
+    
+    R_new, C_new = NonLinearPnP(X_3d, x_2d, K, C, R)
+    print(R_new, C_new)
 
 if __name__ == "__main__":
     main()
