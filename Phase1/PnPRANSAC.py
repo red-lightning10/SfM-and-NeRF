@@ -45,5 +45,6 @@ def PnPRANSAC(X_3d, x_2d, K, threshold, nIterations=1000):
             C_best = C
             R_best = R
     
+    # R_best, C_best = LinearPnP(x_2d[inliers_indices], X_3d[inliers_indices], K)
     inliers = X_3d[inliers_indices]
     return R_best, C_best, inliers
