@@ -9,6 +9,7 @@ from ExtractCameraPose import get_cam_pose
 from LinearTriangulation import LinearTriangulation
 from DisambiguateCameraPose import DisambiguateCameraPose
 from NonLinearTriangulation import NonLinearTriangulation
+from LinearPnP import LinearPnP
 
 def create_feature_match_dict(n):
     feature_matches = {}
@@ -195,7 +196,7 @@ def main():
 
     #create nested dictionary for feature matches
     feature_matches = create_feature_match_dict(len(image_paths))
-
+    filtered_matches = create_feature_match_dict(len(image_paths))
     for i in range(len(descriptor_files)):
         feature_matches = ReadFeatureDescriptors(descriptor_files[i], feature_matches, i)
         for j in range(i + 1, len(image_paths)):
@@ -203,32 +204,39 @@ def main():
             cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
 
             #RANSAC filtering
-            filtered_matches = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
-            RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches)
+            filtered_matches_list = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
+            filtered_matches[i + 1][j + 1] = filtered_matches_list
+            RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches_list)
             cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
-            F = EstimateFundamentalMatrix(filtered_matches)
-            E = EfromF(F,K)
-            C,R = get_cam_pose(E)
 
-            plot_epipolar_result_img = plot_epipolar_lines(images[i], images[j], F, filtered_matches[:, 0, :], filtered_matches[:, 1, :])
-            cv2.imwrite(os.path.join(results_path, 'epipolar_lines' + str(i+1) + '_' + str(j+1) + '.png'), plot_epipolar_result_img)
+    filtered_matches_array = np.array(filtered_matches.get(1).get(2))
+    F = EstimateFundamentalMatrix(filtered_matches_array)
+    E = EfromF(F,K)
+    C,R = get_cam_pose(E)
 
-            C0 = np.zeros((3,1))
-            R0 = np.eye(3)
+    # plot_epipolar_result_img = plot_epipolar_lines(images[0], images[1], F, filtered_matches_array[:, 0, :], filtered_matches_array[:, 1, :])
+    # cv2.imwrite(os.path.join(results_path, 'epipolar_lines' + str(1) + '_' + str(2) + '.png'), plot_epipolar_result_img)
 
-            X_lt = []
-            print("fm", filtered_matches.shape)
-            for Ci, Ri in zip(C,R):
-                x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches)
-                print("x_lt", x_lt.shape)
-                X_lt.append(x_lt)
-        
-            C, R, X = DisambiguateCameraPose(C, R, X_lt)
-            X_nlt = NonLinearTriangulation(K, C0, R0, C, R, X, filtered_matches)
-            print(X.shape)
-            print(X_nlt.shape)
+    C0 = np.zeros((3,1))
+    R0 = np.eye(3)
 
+    X_lt = []
+    print("fm", filtered_matches_array.shape)
+    for Ci, Ri in zip(C,R):
+        x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches_array)
+        print("x_lt", x_lt.shape)
+        X_lt.append(x_lt)
 
+    C, R, X = DisambiguateCameraPose(C, R, X_lt)
+    X_nlt = NonLinearTriangulation(K, C0, R0, C, R, X, filtered_matches_array)
+    print(X.shape)
+    print(X_nlt.shape)
+
+    
+    # PnP
+    x_2d = filtered_matches_array[:, 1, :]
+    X_3d = X_nlt
+    LinearPnP(x_2d, X_3d, K)
 
 if __name__ == "__main__":
     main()
