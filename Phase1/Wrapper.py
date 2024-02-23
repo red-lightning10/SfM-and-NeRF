@@ -12,6 +12,21 @@ from NonLinearTriangulation import NonLinearTriangulation
 from PnPRANSAC import PnPRANSAC, project_from_world_to_image
 from NonLinearPnP import NonLinearPnP
 
+
+class PointCloud:
+    def __init__(self, num_images):
+        self.point_cloud = []
+        self.point_correspondence = create_visibility_dict(num_images)     
+    
+    def add_point_cloud(self, point_cloud, image_id, feature_points):
+        self.point_cloud.extend(point_cloud)
+        temp = list(self.point_correspondence.get(image_id))
+        temp.extend(feature_points)
+        self.point_correspondence[image_id] = temp
+
+    def get_2d_correspondence_for_image(self, image_id):
+        return self.point_correspondence[image_id]
+
 def create_feature_match_dict(n):
     feature_matches = {}
     for i in range(1, n):
@@ -71,17 +86,17 @@ def ReadFeatureDescriptors(descriptor_file, feature_matches, i, visibility, num_
             
     return feature_matches, visibility
 
-def access_visibility_dictionary(visibility_dictionary, feature_x, feature_y):
-    return visibility_dictionary[str([feature_x, feature_y])]
+def access_visibility_dictionary(visibility_dictionary, feature_x, feature_y, i):
+    return visibility_dictionary[i + 1][str([feature_x, feature_y])]
 
-def get_features_and_visibility(visibility_dictionary, feature_points):
+def get_features_and_visibility(visibility_dictionary, feature_points, i):
     features_x = []
     features_y = []
     visibility = []
     for point in feature_points:
         feature_x = point[0]
         feature_y = point[1]
-        visibility.append(access_visibility_dictionary(visibility_dictionary, feature_x, feature_y).flatten())
+        visibility.append(access_visibility_dictionary(visibility_dictionary, feature_x, feature_y, i).flatten())
         features_x.append(feature_x)
         features_y.append(feature_y)
     return features_x, features_y, visibility
@@ -157,6 +172,18 @@ def GetInlierRANSAC(matches, threshold, nIterations):
     inliers = matches_array[inliers_indices]
     return inliers
 
+def filter_visibility_dict(visibility, filtered_dict, filtered_matches, i, j, num_images = 5):
+
+    for match in filtered_matches:
+        feature_x = match[0][0]
+        feature_y = match[0][1]
+        filtered_dict[i+1][str([feature_x, feature_y])] = visibility[i+1][str([feature_x, feature_y])]
+        feature_x = match[1][0]
+        feature_y = match[1][1]
+        filtered_dict[j+1][str([feature_x, feature_y])] = visibility[j+1][str([feature_x, feature_y])]
+    return filtered_dict
+    
+
 def get_epipole(F):
     U, _, V = np.linalg.svd(F)
     e1 = V[-1]
@@ -206,15 +233,18 @@ def plot_linear_triangles(img, K, R, C, X, features):
         cv2.circle(image, (int(features[i][0]),int(features[i][1])), 2, (0, 255, 0), -1)
     return image
 
-def show_disambiguated_and_corrected_poses(X_linear, Xs_all_poses):
-    plt.figure("camera disambiguation")
-    colors = ['red','brown','greenyellow','teal']
-    for color, X_c in zip(colors, Xs_all_poses):
-        plt.scatter(X_c[:,0],X_c[:,2],color=color,marker='.')
+def show_disambiguated_and_corrected_poses(X):
 
     plt.figure("linear triangulation")
-    plt.scatter(X_linear[:, 0], X_linear[:, 2], color='skyblue', marker='.')
-    #plt.scatter(0, 0, marker='^', s=20)
+    #scatter plot of the 2d points
+    plt.scatter(X[:, 0], X[:, 2], c='r', marker='.')
+    plt.xlabel('X')
+    plt.ylabel('Z')
+    plt.scatter(0, 0, marker='^', s=20)
+    plt.savefig('3d_point_cloud.png')
+
+# def get_2d_3d_correspondences(matches, point_cloud_dict, i, j):
+
 
 def main():
     
@@ -247,82 +277,90 @@ def main():
     feature_matches = create_feature_match_dict(len(image_paths))
     filtered_matches = create_feature_match_dict(len(image_paths))
     visibility_dictionary = create_visibility_dict(len(image_paths))
-
+    filtered_visibility_dictionary = create_visibility_dict(len(image_paths))
+    point_cloud_dict = {}
     for i in range(len(descriptor_files)):
         feature_matches, visibility_dictionary = ReadFeatureDescriptors(descriptor_files[i], feature_matches, \
                                                              i, visibility_dictionary, len(image_paths))
 
-    f = np.array(feature_matches.get(1).get(2))
-    x, y, v = get_features_and_visibility(visibility_dictionary[2], f[:, 1, :])
-    print(len(x))
-    print(len(y))
+        for j in range(i + 1, len(image_paths)):
+            result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
+            cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
 
+            #RANSAC filtering
+            filtered_matches_list = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
+            filtered_matches[i + 1][j + 1] = filtered_matches_list
+            # filtered_visibility_dictionary = filter_visibility_dict(visibility_dictionary, \
+            #                                     filtered_visibility_dictionary, filtered_matches_list, i, j)
+            RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches_list)
+            cv2.imwrite(os.path.join(results_path, 'correspondences_after_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
+
+    filtered_matches_array = np.array(filtered_matches.get(1).get(2))
+    F = EstimateFundamentalMatrix(filtered_matches_array)
+    print(F)
+    E = EfromF(F,K)
+    print(E)
+    C,R = get_cam_pose(E)
+
+    plot_epipolar_result_img = plot_epipolar_lines(images[0], images[1], F, filtered_matches_array[:, 0, :], filtered_matches_array[:, 1, :])
+    cv2.imwrite(os.path.join(results_path, 'epipolar_lines' + str(1) + '_' + str(2) + '.png'), plot_epipolar_result_img)
+
+    C0 = np.zeros((3,1))
+    R0 = np.eye(3)
+
+    point_cloud = []
+    X_lt_all = []
+    print("fm", filtered_matches_array.shape)
+    for Ci, Ri in zip(C,R):
+        x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches_array)
+        print("x_lt", x_lt.shape)
+        X_lt_all.append(x_lt)
+
+    C, R, X = DisambiguateCameraPose(C, R, X_lt_all)
+    X_nlt = NonLinearTriangulation(K, C0, R0, C, R, X, filtered_matches_array)
+
+    PC = PointCloud(len(image_paths))
+    PC.add_point_cloud(X_nlt, 1, filtered_matches_array[:, 0, :])
+    PC.add_point_cloud(X_nlt, 2, filtered_matches_array[:, 1, :])
+
+    print(X_nlt.shape)
+    print(PC.point_correspondence)
+    print(PC.point_cloud)
+
+    Cset = [C0, C]
+    Rset = [R0, R]
+
+    print(Cset, Rset)
+
+    for i in range(2, len(image_paths)):
+        
+        X_3d = np.array(PC.point_cloud)
+        filtered_matches_array = np.array(filtered_matches.get(1).get(i))
+        _, _, vis = get_features_and_visibility(visibility_dictionary, filtered_matches_array[:, 0, :], 0)
+        corresponding_idx_in_1 = [num for num, v in enumerate(vis) if v[0:i+1].all() == True]
+        print(corresponding_idx_in_1)
+        X_3d = X_3d[corresponding_idx_in_1]
+        x_2d = filtered_matches_array[corresponding_idx_in_1, 1, :]
+
+        R, C = PnPRANSAC(X_3d, x_2d, K, threshold=25, nIterations=2000)
     
-    #     for j in range(i + 1, len(image_paths)):
-    #         result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
-    #         cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
+        R_new, C_new = NonLinearPnP(X_3d, x_2d, K, C, R)
+        
+        print(R_new, C_new)
+        C_new = C_new.reshape(3,1)
+        Cset.append(C_new)
+        Rset.append(R_new)
 
-    #         #RANSAC filtering
-    #         filtered_matches_list = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
-    #         filtered_matches[i + 1][j + 1] = filtered_matches_list
-    #         RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches_list)
-    #         cv2.imwrite(os.path.join(results_path, 'correspondences_after_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
+        X_lt = LinearTriangulation(K, C0, R0, C_new, R_new, filtered_matches_array)
+        X_nlt = NonLinearTriangulation(K, C0, R0, C_new, R_new, X_lt, filtered_matches_array)
+        PC.add_point_cloud(X_nlt, 1, filtered_matches_array[corresponding_idx_in_1, 0, :])
+        PC.add_point_cloud(X_nlt, i, filtered_matches_array[corresponding_idx_in_1, 1, :])
 
-    # filtered_matches_array = np.array(filtered_matches.get(1).get(2))
-    # F = EstimateFundamentalMatrix(filtered_matches_array)
-    # E = EfromF(F,K)
-    # C,R = get_cam_pose(E)
-
-    # plot_epipolar_result_img = plot_epipolar_lines(images[0], images[1], F, filtered_matches_array[:, 0, :], filtered_matches_array[:, 1, :])
-    # cv2.imwrite(os.path.join(results_path, 'epipolar_lines' + str(1) + '_' + str(2) + '.png'), plot_epipolar_result_img)
-
-    # C0 = np.zeros((3,1))
-    # R0 = np.eye(3)
-
-    # X_nlt_all = []
-    # X_lt_all = []
-    # print("fm", filtered_matches_array.shape)
-    # for Ci, Ri in zip(C,R):
-    #     x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches_array)
-    #     print("x_lt", x_lt.shape)
-    #     X_lt_all.append(x_lt)
-
-    # C, R, X = DisambiguateCameraPose(C, R, X_lt_all)
-    # X_nlt = NonLinearTriangulation(K, C0, R0, C, R, X, filtered_matches_array)
-    # X_nlt_all.append(X_nlt)
-    # print(X.shape)
-    # print(X_nlt.shape)
-
-    # lt_plot = plot_linear_triangles(images[1], K, R, C, X, filtered_matches_array[:, 1, :])
-    # cv2.imwrite(os.path.join(results_path, 'linear_triangulation' + str(2) + '.png'), lt_plot)
-    # nlt_plot = plot_linear_triangles(images[1], K, R, C, X_nlt, filtered_matches_array[:, 1, :])
-    # cv2.imwrite(os.path.join(results_path, 'non_linear_triangulation' + str(2) + '.png'), nlt_plot)
-
-    # Cset = [C0, C]
-    # Rset = [R0, R]
-
-    # print(Cset, Rset)
-
-    # for i in range(2, len(image_paths)):
-    #     filtered_matches_array = np.array(filtered_matches.get(1).get(i))
-    #     x_2d = filtered_matches_array[:, 1, :]
-    #     X_3d = X_nlt
-    #     print("X_3d", X_3d.shape)
-    #     print("x_2d", x_2d.shape)
-    #     R, C = PnPRANSAC(X_3d, x_2d, K, threshold=20, nIterations=1000)
-    
-    #     R_new, C_new = NonLinearPnP(X_3d, x_2d, K, C, R)
-    #     print(R_new, C_new)
-    #     C_new = C_new.reshape(3,1)
-    #     Cset.append(C_new)
-    #     Rset.append(R_new)
-
-    #     X_lt = LinearTriangulation(K, C0, R0, C_new, R_new, filtered_matches_array)
-    #     X_nlt = NonLinearTriangulation(K, C0, R0, C_new, R_new, X_lt, filtered_matches_array)
-    #     X_nlt_all.append(X_nlt)
-    #     print(X.shape)
-    #     print(X_nlt.shape)
-    # PnP
-
+    print(Rset)
+    print(Cset)
+    print(np.shape(PC.point_cloud))
+    X_3d = np.array(PC.point_cloud)
+    show_disambiguated_and_corrected_poses(X_3d)
+    # print(PC.point_correspondence.get(1).shape)
 if __name__ == "__main__":
     main()

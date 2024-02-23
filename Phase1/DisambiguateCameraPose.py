@@ -11,11 +11,12 @@ def DisambiguateCameraPose(Cset, Rset, Xset):
         # print(X)
         num_points_in_front = []
         # num_points_in_front = [np.dot(r3,(X[j] - C)) > 0  for j in range(len(X))]
-        num_points_in_front = [r3.T @ (X[j] - C).T > 0 for j in range(len(X))]
+        num_points_in_front = [r3.T @ (X[j] - C).T > 0 and X[j][2] > 0 for j in range(len(X))]
         if sum(num_points_in_front) > max_points_in_front:
             max_points_in_front = sum(num_points_in_front)
             C = Cset[i]
             R = Rset[i]
-            max_X_in_front = Xset[i]
+            inliers_check = np.where(num_points_in_front)
+            max_X_in_front = Xset[i][inliers_check]
     print("max", np.shape(max_X_in_front), Xset[0].shape)
     return C.reshape(3,1), R, max_X_in_front
