@@ -6,10 +6,10 @@ import glob
 from matplotlib import pyplot as plt
 from EssentialMatrixFromFundamentalMatrix import EfromF
 from ExtractCameraPose import get_cam_pose
-from LinearTriangulation import LinearTriangulation
+from LinearTriangulation import LinearTriangulation, create_projection_matrix
 from DisambiguateCameraPose import DisambiguateCameraPose
 from NonLinearTriangulation import NonLinearTriangulation
-from PnPRANSAC import PnPRANSAC
+from PnPRANSAC import PnPRANSAC, project_from_world_to_image
 from NonLinearPnP import NonLinearPnP
 
 def create_feature_match_dict(n):
@@ -20,6 +20,12 @@ def create_feature_match_dict(n):
             feature_matches[i][j] = {}
 
     return feature_matches
+
+def create_visibility_dict(n):
+    visibility = {}
+    for i in range(n):
+        visibility[i + 1] = {}
+    return visibility
 
 def ReadCalibrationFile(calibration_file):
     with open(calibration_file, 'r') as f:
@@ -32,30 +38,53 @@ def ReadCalibrationFile(calibration_file):
                 break
         return K
 
-def ReadFeatureDescriptors(descriptor_file, feature_matches, i):
+def ReadFeatureDescriptors(descriptor_file, feature_matches, i, visibility, num_images):
     with open(descriptor_file, 'r') as f:
         lines = f.readlines()
         for j in range(len(lines)):
             lines[j] = lines[j].split()
         nFeatures = int(lines[0][1])
-
+        
         for j in range(1, len(lines)):
+            point_visibility = np.zeros((1, num_images), dtype=bool)
             nFeatures_kp = int(lines[j][0])
             image1_id = i + 1
             image1_kp_rgb = [int(lines[j][1]), int(lines[j][2]), int(lines[j][3])]
             image1_kp = [float(lines[j][4]), float(lines[j][5])]
-            
+            point_visibility[0, i] = True
+
             for k in range(nFeatures_kp - 1):
                 image2_id = int(lines[j][6 + 3*k])
-                image2_kp= [float(lines[j][7 + 3*k]), float(lines[j][8 + 3*k])]
+                image2_kp = [float(lines[j][7 + 3*k]), float(lines[j][8 + 3*k])]
                 current_matches = list(feature_matches.get(image1_id).get(image2_id))
                 current_matches.append((image1_kp, image2_kp))
                 feature_matches[image1_id][image2_id] = current_matches
-                # print(image1_id, image2_id, image1_kp, image2_kp)
-        # print(lines)
-        # feature_descriptors = np.array(lines, dtype=np.float32)
-    # print(feature_matches)
-    return feature_matches
+                point_visibility[0, image2_id - 1] = True
+            
+            for k in range(nFeatures_kp - 1):
+                image2_id = int(lines[j][6 + 3*k])
+                image2_kp = [float(lines[j][7 + 3*k]), float(lines[j][8 + 3*k])]
+                visibility[image2_id][str(image2_kp)] = point_visibility
+            
+            visibility[image1_id][str(image1_kp)] = point_visibility
+
+            
+    return feature_matches, visibility
+
+def access_visibility_dictionary(visibility_dictionary, feature_x, feature_y):
+    return visibility_dictionary[str([feature_x, feature_y])]
+
+def get_features_and_visibility(visibility_dictionary, feature_points):
+    features_x = []
+    features_y = []
+    visibility = []
+    for point in feature_points:
+        feature_x = point[0]
+        feature_y = point[1]
+        visibility.append(access_visibility_dictionary(visibility_dictionary, feature_x, feature_y).flatten())
+        features_x.append(feature_x)
+        features_y.append(feature_y)
+    return features_x, features_y, visibility
 
 def plot_feature_correspondences(source, target, matches):
 
@@ -79,10 +108,10 @@ def EstimateFundamentalMatrix(matches_array):
         print("Fundamental Matrix needs more sets of points. Aborting.")
         return A
     
-    x = matches_array[:, 0, 0]
-    y = matches_array[:, 0, 1]
-    xm = matches_array[:, 1, 0]
-    ym = matches_array[:, 1, 1]
+    x = matches_array[:, 1, 0]
+    y = matches_array[:, 1, 1]
+    xm = matches_array[:, 0, 0]
+    ym = matches_array[:, 0, 1]
 
     # choices = np.random.choice(np.arange(len(matches)), 8, replace=False)
     for i in range(len(x)):
@@ -168,6 +197,25 @@ def plot_epipolar_lines(img1, img2, F, pts1, pts2):
 
     return np.concatenate((i1, i2), axis = 1)
 
+def plot_linear_triangles(img, K, R, C, X, features):
+
+    image = img.copy()
+    x = project_from_world_to_image(X, K, R, C)
+    for i in range(len(x)):
+        cv2.circle(image, (int(x[i][0]),int(x[i][1])), 2, (0, 0, 255), -1)
+        cv2.circle(image, (int(features[i][0]),int(features[i][1])), 2, (0, 255, 0), -1)
+    return image
+
+def show_disambiguated_and_corrected_poses(X_linear, Xs_all_poses):
+    plt.figure("camera disambiguation")
+    colors = ['red','brown','greenyellow','teal']
+    for color, X_c in zip(colors, Xs_all_poses):
+        plt.scatter(X_c[:,0],X_c[:,2],color=color,marker='.')
+
+    plt.figure("linear triangulation")
+    plt.scatter(X_linear[:, 0], X_linear[:, 2], color='skyblue', marker='.')
+    #plt.scatter(0, 0, marker='^', s=20)
+
 def main():
     
     path = os.getcwd()
@@ -198,49 +246,83 @@ def main():
     #create nested dictionary for feature matches
     feature_matches = create_feature_match_dict(len(image_paths))
     filtered_matches = create_feature_match_dict(len(image_paths))
+    visibility_dictionary = create_visibility_dict(len(image_paths))
+
     for i in range(len(descriptor_files)):
-        feature_matches = ReadFeatureDescriptors(descriptor_files[i], feature_matches, i)
-        for j in range(i + 1, len(image_paths)):
-            result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
-            cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
+        feature_matches, visibility_dictionary = ReadFeatureDescriptors(descriptor_files[i], feature_matches, \
+                                                             i, visibility_dictionary, len(image_paths))
 
-            #RANSAC filtering
-            filtered_matches_list = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
-            filtered_matches[i + 1][j + 1] = filtered_matches_list
-            RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches_list)
-            cv2.imwrite(os.path.join(results_path, 'correspondences_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
+    f = np.array(feature_matches.get(1).get(2))
+    x, y, v = get_features_and_visibility(visibility_dictionary[2], f[:, 1, :])
+    print(len(x))
+    print(len(y))
 
-    filtered_matches_array = np.array(filtered_matches.get(1).get(2))
-    F = EstimateFundamentalMatrix(filtered_matches_array)
-    E = EfromF(F,K)
-    C,R = get_cam_pose(E)
+    
+    #     for j in range(i + 1, len(image_paths)):
+    #         result_img = plot_feature_correspondences(images[i], images[j], feature_matches[i + 1][j + 1])
+    #         cv2.imwrite(os.path.join(results_path, 'correspondences_before_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), result_img)
+
+    #         #RANSAC filtering
+    #         filtered_matches_list = GetInlierRANSAC(feature_matches[i + 1][j + 1], 5e-3, 1000)
+    #         filtered_matches[i + 1][j + 1] = filtered_matches_list
+    #         RANSAC_result_img = plot_feature_correspondences(images[i], images[j], filtered_matches_list)
+    #         cv2.imwrite(os.path.join(results_path, 'correspondences_after_RANSAC' + str(i+1) + '_' + str(j+1) + '.png'), RANSAC_result_img)
+
+    # filtered_matches_array = np.array(filtered_matches.get(1).get(2))
+    # F = EstimateFundamentalMatrix(filtered_matches_array)
+    # E = EfromF(F,K)
+    # C,R = get_cam_pose(E)
 
     # plot_epipolar_result_img = plot_epipolar_lines(images[0], images[1], F, filtered_matches_array[:, 0, :], filtered_matches_array[:, 1, :])
     # cv2.imwrite(os.path.join(results_path, 'epipolar_lines' + str(1) + '_' + str(2) + '.png'), plot_epipolar_result_img)
 
-    C0 = np.zeros((3,1))
-    R0 = np.eye(3)
+    # C0 = np.zeros((3,1))
+    # R0 = np.eye(3)
 
-    X_lt = []
-    print("fm", filtered_matches_array.shape)
-    for Ci, Ri in zip(C,R):
-        x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches_array)
-        print("x_lt", x_lt.shape)
-        X_lt.append(x_lt)
+    # X_nlt_all = []
+    # X_lt_all = []
+    # print("fm", filtered_matches_array.shape)
+    # for Ci, Ri in zip(C,R):
+    #     x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches_array)
+    #     print("x_lt", x_lt.shape)
+    #     X_lt_all.append(x_lt)
 
-    C, R, X = DisambiguateCameraPose(C, R, X_lt)
-    X_nlt = NonLinearTriangulation(K, C0, R0, C, R, X, filtered_matches_array)
-    print(X.shape)
-    print(X_nlt.shape)
+    # C, R, X = DisambiguateCameraPose(C, R, X_lt_all)
+    # X_nlt = NonLinearTriangulation(K, C0, R0, C, R, X, filtered_matches_array)
+    # X_nlt_all.append(X_nlt)
+    # print(X.shape)
+    # print(X_nlt.shape)
 
+    # lt_plot = plot_linear_triangles(images[1], K, R, C, X, filtered_matches_array[:, 1, :])
+    # cv2.imwrite(os.path.join(results_path, 'linear_triangulation' + str(2) + '.png'), lt_plot)
+    # nlt_plot = plot_linear_triangles(images[1], K, R, C, X_nlt, filtered_matches_array[:, 1, :])
+    # cv2.imwrite(os.path.join(results_path, 'non_linear_triangulation' + str(2) + '.png'), nlt_plot)
+
+    # Cset = [C0, C]
+    # Rset = [R0, R]
+
+    # print(Cset, Rset)
+
+    # for i in range(2, len(image_paths)):
+    #     filtered_matches_array = np.array(filtered_matches.get(1).get(i))
+    #     x_2d = filtered_matches_array[:, 1, :]
+    #     X_3d = X_nlt
+    #     print("X_3d", X_3d.shape)
+    #     print("x_2d", x_2d.shape)
+    #     R, C = PnPRANSAC(X_3d, x_2d, K, threshold=20, nIterations=1000)
     
+    #     R_new, C_new = NonLinearPnP(X_3d, x_2d, K, C, R)
+    #     print(R_new, C_new)
+    #     C_new = C_new.reshape(3,1)
+    #     Cset.append(C_new)
+    #     Rset.append(R_new)
+
+    #     X_lt = LinearTriangulation(K, C0, R0, C_new, R_new, filtered_matches_array)
+    #     X_nlt = NonLinearTriangulation(K, C0, R0, C_new, R_new, X_lt, filtered_matches_array)
+    #     X_nlt_all.append(X_nlt)
+    #     print(X.shape)
+    #     print(X_nlt.shape)
     # PnP
-    x_2d = filtered_matches_array[:, 1, :]
-    X_3d = X_nlt
-    R, C = PnPRANSAC(X_3d, x_2d, K, threshold=20, nIterations=1000)
-    
-    R_new, C_new = NonLinearPnP(X_3d, x_2d, K, C, R)
-    print(R_new, C_new)
 
 if __name__ == "__main__":
     main()
