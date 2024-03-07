@@ -14,7 +14,7 @@ from NeRFModel import *
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 np.random.seed(0)
-
+print(device)
 def loadDataset(data_path, mode):
     """
     Input:
@@ -30,19 +30,21 @@ def loadDataset(data_path, mode):
     image_paths = []
     with open(json_file[0]) as f:
         data = json.load(f)
-        camera_info = data['camera_angle_x']
+        camera_fov = data['camera_angle_x']
+        # camera_info = {"focal_length" : 0.5 * 800 / np.tan(0.5 * camera_fov), "width" : data['pixel_width'], "height" : data['pixel_height']}
         pose = data['frames']
         for i in range(len(pose)):
             pose[i]['transform_matrix'] = np.array(pose[i]['transform_matrix'])
             pose[i]['rotation'] = np.array(pose[i]['rotation'])
             pose[i]['file_path'] = os.path.join(data_path, pose[i]['file_path'][2:])
             image_paths.append(pose[i]['file_path'] + ".png")
-    print("Images: ", image_paths)
     images = []
     for i in range(len(image_paths)):
         img = cv2.imread(image_paths[i])
         images.append(img)
 
+    print(images[0].shape)
+    camera_info = []
     return images, pose, camera_info     
 
 
@@ -56,6 +58,7 @@ def PixelToRay(camera_info, pose, pixelPosition, args):
     Outputs:
         ray origin and direction
     """
+
 
 def generateBatch(images, poses, camera_info, args):
     """
@@ -115,7 +118,6 @@ def main(args):
     # load data
     print("Loading data...")
     images, poses, camera_info = loadDataset(args.data_path, args.mode)
-    # images, poses, camera_info = loadDataset("/home/redlightning/Workspace/RBE549/SfM-and-NeRF/Phase2/Data/lego/", "train")
     if args.mode == 'train':
         print("Start training")
         train(images, poses, camera_info, args)
