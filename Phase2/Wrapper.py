@@ -2,11 +2,13 @@ import argparse
 import glob
 from tqdm import tqdm
 import random
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 import imageio
 import torch
 import matplotlib.pyplot as plt
 import os
+import json
+import cv2
 
 from NeRFModel import *
 
@@ -17,12 +19,32 @@ def loadDataset(data_path, mode):
     """
     Input:
         data_path: dataset path
-        mode: train or test
+        mode: train or test or val
     Outputs:
         camera_info: image width, height, camera matrix 
         images: images
         pose: corresponding camera pose in world frame
     """
+    json_file_path = os.path.join(data_path, "transforms_" + mode)
+    json_file = glob.glob(json_file_path + ".json")
+    image_paths = []
+    with open(json_file[0]) as f:
+        data = json.load(f)
+        camera_info = data['camera_angle_x']
+        pose = data['frames']
+        for i in range(len(pose)):
+            pose[i]['transform_matrix'] = np.array(pose[i]['transform_matrix'])
+            pose[i]['rotation'] = np.array(pose[i]['rotation'])
+            pose[i]['file_path'] = os.path.join(data_path, pose[i]['file_path'][2:])
+            image_paths.append(pose[i]['file_path'] + ".png")
+    print("Images: ", image_paths)
+    images = []
+    for i in range(len(image_paths)):
+        img = cv2.imread(image_paths[i])
+        images.append(img)
+
+    return images, pose, camera_info     
+
 
 def PixelToRay(camera_info, pose, pixelPosition, args):
     """
@@ -57,19 +79,43 @@ def render(model, rays_origin, rays_direction, args):
     """
 
 def loss(groundtruth, prediction):
-
+    """
+    Input:
+        groundtruth: groundtruth rgb values
+        prediction: predicted rgb values
+    Outputs:
+        loss
+    """
 
 def train(images, poses, camera_info, args):
+    """
+    Input:
+        images: all images in dataset
+        poses: corresponding camera pose in world frame
+        camera_info: image width, height, camera matrix
+        args: training related parameters
+    Outputs:
+        trained model
+    """
     
 
 def test(images, poses, camera_info, args):
-
+    """
+    Input:
+        images: all images in dataset
+        poses: corresponding camera pose in world frame
+        camera_info: image width, height, camera matrix
+        args: testing related parameters
+    Outputs:
+        rendered images
+    """
 
 def main(args):
+    
     # load data
     print("Loading data...")
     images, poses, camera_info = loadDataset(args.data_path, args.mode)
-
+    # images, poses, camera_info = loadDataset("/home/redlightning/Workspace/RBE549/SfM-and-NeRF/Phase2/Data/lego/", "train")
     if args.mode == 'train':
         print("Start training")
         train(images, poses, camera_info, args)
