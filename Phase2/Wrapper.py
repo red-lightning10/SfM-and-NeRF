@@ -30,12 +30,12 @@ def loadDataset(data_path, mode):
     image_paths = []
     with open(json_file[0]) as f:
         data = json.load(f)
-        camera_fov = data['camera_angle_x']
-        # camera_info = {"focal_length" : 0.5 * 800 / np.tan(0.5 * camera_fov), "width" : data['pixel_width'], "height" : data['pixel_height']}
+        camera_fov = float(data['camera_angle_x'])
+        print(camera_fov)
         pose = data['frames']
         for i in range(len(pose)):
-            pose[i]['transform_matrix'] = np.array(pose[i]['transform_matrix'])
-            pose[i]['rotation'] = np.array(pose[i]['rotation'])
+            pose[i]['transform_matrix'] = torch.tensor(pose[i]['transform_matrix'])
+            pose[i]['rotation'] = torch.tensor(pose[i]['rotation'])
             pose[i]['file_path'] = os.path.join(data_path, pose[i]['file_path'][2:])
             image_paths.append(pose[i]['file_path'] + ".png")
     images = []
@@ -43,8 +43,8 @@ def loadDataset(data_path, mode):
         img = cv2.imread(image_paths[i])
         images.append(img)
 
-    print(images[0].shape)
-    camera_info = []
+    camera_info = { "H" : images[0].shape[0], "W" : images[0].shape[1], \
+                   "f" : torch.tensor(0.5*images[0].shape[1]/np.tan(0.5*camera_fov)).to(device)}
     return images, pose, camera_info     
 
 
