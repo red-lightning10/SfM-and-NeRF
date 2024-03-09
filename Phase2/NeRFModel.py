@@ -4,35 +4,40 @@ import numpy as np
 
 
 class NeRFmodel(nn.Module):
-    def __init__(self, embed_pos_L, embed_direction_L):
+    def __init__(self):
         super(NeRFmodel, self).__init__()
         #############################
         # network initialization
         #############################
         self.layer1 = nn.Sequential(
             nn.Linear(3 + 3*2*6, 256),
-            nn.Relu(),
+            nn.ReLU(),
         )
         self.layer2 = nn.Sequential(
             nn.Linear(256,256),
-            nn.Relu(),
+            nn.ReLU(),
         )
         self.layer3 = nn.Sequential(
             nn.Linear(256+39, 256),
-            nn.Relu(),
+            nn.ReLU(),
         )
         self.layer4 = nn.Sequential(
             nn.Linear(256,128),
-            nn.Relu(),
+            nn.ReLU(),
         )
         self.layer5 = nn.Sequential(
             nn.Linear(128,4),
         )
-    def position_encoding(self, x, L):
+    def pos_enc(self, x, L):
         #############################
         # Implement position encoding here
         #############################
-
+        y = []
+        y.append(x)
+        for i in range(L):
+            y.append(torch.sin((2.0**i) * x))
+            y.append(torch.cos((2.0**i) * x))
+        y = torch.concat(y, axis =-1)
         return y
 
     def forward(self, pos, direction):
