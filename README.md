@@ -1,6 +1,6 @@
 # SfM and NeRF Project
 
-This repository contains implementations of Structure from Motion (SfM) and Neural Radiance Fields (NeRF) for 3D reconstruction and novel view synthesis given sparse set of images. 
+This repository contains implementations of Structure from Motion (SfM) for 3D scene reconstruction given images captured in different camera poses and Neural Radiance Fields (NeRF) for novel view synthesis given sparse set of images. 
 
 ## Phase 1: Structure from Motion (SfM)
 
