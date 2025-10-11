@@ -11,6 +11,8 @@ from DisambiguateCameraPose import DisambiguateCameraPose
 from NonLinearTriangulation import NonLinearTriangulation
 from PnPRANSAC import PnPRANSAC, project_from_world_to_image
 from NonLinearPnP import NonLinearPnP
+from BundleAdjustment import BundleAdjustment
+from BuildVisibilityMatrix import get_features_and_visibility, access_visibility_dictionary
 
 
 class PointCloud:
@@ -249,25 +251,24 @@ def show_disambiguated_and_corrected_poses(X):
 def main():
     
     path = os.getcwd()
-    calibration_file = os.path.join(os.path.join(path, 'Data'), 'calibration.txt')
+    calibration_file = os.path.join(os.path.join(path, '..', 'Data'), 'calibration.txt')
     # print(calibration_file)
     K = ReadCalibrationFile(calibration_file)
-    print(K)
     results_path = os.path.join(path, "Results")
     if not os.path.exists(results_path):
         os.makedirs(results_path)
 
     #Read Descriptor files
     descriptor_files = []
-    for i in os.listdir(os.path.join(path, 'Data')):
+    for i in os.listdir(os.path.join(path, '..', 'Data')):
         if i.startswith('matching') and i.endswith('.txt'):
-            descriptor_files.append(os.path.join(os.path.join(path, 'Data'), i))
+            descriptor_files.append(os.path.join(os.path.join(path, '..', 'Data'), i))
     
     descriptor_files = sorted(descriptor_files)
     
     # Read images
     images = []
-    image_paths = glob.glob(os.path.join(os.path.join(path, 'Data'), '*.png'))
+    image_paths = glob.glob(os.path.join(os.path.join(path, '..', 'Data'), '*.png'))
     image_paths = sorted(image_paths)
     for i in range(len(image_paths)):
         img = cv2.imread(image_paths[i])
@@ -297,9 +298,7 @@ def main():
 
     filtered_matches_array = np.array(filtered_matches.get(1).get(2))
     F = EstimateFundamentalMatrix(filtered_matches_array)
-    print(F)
     E = EfromF(F,K)
-    print(E)
     C,R = get_cam_pose(E)
 
     plot_epipolar_result_img = plot_epipolar_lines(images[0], images[1], F, filtered_matches_array[:, 0, :], filtered_matches_array[:, 1, :])
@@ -310,10 +309,8 @@ def main():
 
     point_cloud = []
     X_lt_all = []
-    print("fm", filtered_matches_array.shape)
     for Ci, Ri in zip(C,R):
         x_lt = LinearTriangulation(K, C0, R0, Ci, Ri, filtered_matches_array)
-        print("x_lt", x_lt.shape)
         X_lt_all.append(x_lt)
 
     C, R, X = DisambiguateCameraPose(C, R, X_lt_all)
@@ -323,14 +320,9 @@ def main():
     PC.add_point_cloud(X_nlt, 1, filtered_matches_array[:, 0, :])
     PC.add_point_cloud(X_nlt, 2, filtered_matches_array[:, 1, :])
 
-    print(X_nlt.shape)
-    print(PC.point_correspondence)
-    print(PC.point_cloud)
-
     Cset = [C0, C]
     Rset = [R0, R]
 
-    print(Cset, Rset)
 
     for i in range(2, len(image_paths)):
         
@@ -338,7 +330,6 @@ def main():
         filtered_matches_array = np.array(filtered_matches.get(1).get(i))
         _, _, vis = get_features_and_visibility(visibility_dictionary, filtered_matches_array[:, 0, :], 0)
         corresponding_idx_in_1 = [num for num, v in enumerate(vis) if v[0:i+1].all() == True]
-        print(corresponding_idx_in_1)
         X_3d = X_3d[corresponding_idx_in_1]
         x_2d = filtered_matches_array[corresponding_idx_in_1, 1, :]
 
@@ -346,7 +337,6 @@ def main():
     
         R_new, C_new = NonLinearPnP(X_3d, x_2d, K, C, R)
         
-        print(R_new, C_new)
         C_new = C_new.reshape(3,1)
         Cset.append(C_new)
         Rset.append(R_new)
@@ -356,9 +346,11 @@ def main():
         PC.add_point_cloud(X_nlt, 1, filtered_matches_array[corresponding_idx_in_1, 0, :])
         PC.add_point_cloud(X_nlt, i, filtered_matches_array[corresponding_idx_in_1, 1, :])
 
-    print(Rset)
-    print(Cset)
-    print(np.shape(PC.point_cloud))
+    print(f"Final reconstruction: {len(Rset)} cameras, {len(PC.point_cloud)} 3D points")
+    
+    # Bundle adjustment
+    Cset, Rset, PC = BundleAdjustment(Cset, Rset, PC, K)
+    
     X_3d = np.array(PC.point_cloud)
     show_disambiguated_and_corrected_poses(X_3d)
     # print(PC.point_correspondence.get(1).shape)

@@ -1,22 +1,38 @@
 import numpy as np
 
-def DisambiguateCameraPose(Cset, Rset, Xset):
+def countFrontPoints(R, C, points):
+    count = 0
+    r3 = R[2]
+    C = C.reshape(3,1)
+    for pt in points:
+        X = pt[:3].reshape(3,1)
+        if r3.dot(X - C) > 0 and X[2] > 0:
+            count += 1
+    return count
 
-    max_points_in_front = 0
-    max_X_in_front = []
-    for i in range(len(Cset)):
-        r3 = Rset[i][2]
-        C = Cset[i]
-        X = Xset[i]
-        # print(X)
-        num_points_in_front = []
-        # num_points_in_front = [np.dot(r3,(X[j] - C)) > 0  for j in range(len(X))]
-        num_points_in_front = [r3.T @ (X[j] - C).T > 0 and X[j][2] > 0 for j in range(len(X))]
-        if sum(num_points_in_front) > max_points_in_front:
-            max_points_in_front = sum(num_points_in_front)
-            C = Cset[i]
-            R = Rset[i]
-            inliers_check = np.where(num_points_in_front)
-            max_X_in_front = Xset[i][inliers_check]
-    print("max", np.shape(max_X_in_front), Xset[0].shape)
-    return C.reshape(3,1), R, max_X_in_front
+def disambiguateCameraPosefn(poses, triangulatedPoints):
+    bestScore = -1
+    selectedPose = None
+    worldPoints = None
+    
+    for pose, cloud in zip(poses, triangulatedPoints):
+        score = countFrontPoints(pose[0], pose[1], cloud)
+        if score > bestScore:
+            bestScore = score
+            selectedPose = pose
+            worldPoints = cloud
+            
+    return selectedPose, worldPoints
+
+def DisambiguateCameraPose(Cset, Rset, Xset):
+    poses = [(Rset[i], Cset[i]) for i in range(len(Cset))]
+    triangulatedPoints = Xset
+    
+    selectedPose, worldPoints = disambiguateCameraPosefn(poses, triangulatedPoints)
+    
+    if selectedPose is not None:
+        R, C = selectedPose
+        return C.reshape(3,1), R, worldPoints
+    else:
+        # Fallback to first pose
+        return Cset[0].reshape(3,1), Rset[0], Xset[0]

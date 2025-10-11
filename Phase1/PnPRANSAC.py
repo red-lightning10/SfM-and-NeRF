@@ -4,8 +4,6 @@ import numpy as np
 
 def project_from_world_to_image(X, K, R, C):
 
-    print(R)
-    print(C.shape)
     P = create_projection_matrix(K, C, R)
     X_h = np.hstack((X, np.ones((X.shape[0], 1))))
     x = P @ X_h.T

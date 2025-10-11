@@ -18,7 +18,6 @@ def quaternion_to_rotation_matrix(q):
 def rotation_matrix_to_quaternion(R):
     q = np.zeros(4)
     R = np.array(R)
-    print(R.shape)
     q[0] = 0.5 * np.sqrt(1 + R[0,0] + R[1,1] + R[2,2])
     q[1] = (R[2,1] - R[1,2]) / (4 * q[0])
     q[2] = (R[0,2] - R[2,0]) / (4 * q[0])

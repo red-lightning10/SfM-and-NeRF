@@ -6,11 +6,9 @@ def LinearPnP(x_2d, X_3d, K):
     X, Y, Z = X_3d.T
     x_2d_h = homogenize(x_2d)
     K_inv = np.linalg.inv(K)
-    print(x_2d_h[0, 1])
 
     # x = [K_inv @ x_2d_h[i].T for i in range(len(x_2d_h))]
     # print(x)
-    print(x_2d_h.shape)
     A = []
     for i in range(len(X_3d)):
         
@@ -21,7 +19,6 @@ def LinearPnP(x_2d, X_3d, K):
         
         A = np.vstack((A, [0, 0, 0, 0, X[i], Y[i], Z[i], 1, -x_2d_h[i, 1]*X[i], -x_2d_h[i, 1]*Y[i], -x_2d_h[i, 1]*Z[i], -x_2d_h[i, 1]]))
     
-    print(A.shape)
 
     _, _, VT = np.linalg.svd(A)
     P = VT[-1, :].reshape(3, 4)
@@ -29,7 +26,6 @@ def LinearPnP(x_2d, X_3d, K):
 
     U, S, VT_ = np.linalg.svd(R)
     R = U @ VT_
-    print(S)
     gamma = S[0]
 
     T = K_inv @ P[:, 3]/gamma

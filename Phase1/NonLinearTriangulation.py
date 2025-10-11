@@ -9,7 +9,6 @@ def NonLinearTriangulation(K, C_ref, R_ref, C, R, X, V):
     v1 = homogenize(V[:, 0, :])
     v2 = homogenize(V[:, 1, :])
     X_nlt = []
-    print(X.shape, v1.shape, v2.shape)
     for p1, p2, Xi in zip(v1, v2, X):
         # print(Xi)
         output = least_squares(fun=least_squares_fn, x0=Xi, args=(P1, P2, p1, p2))
@@ -32,5 +31,4 @@ def least_squares_fn(X, P1, P2, pt1, pt2):
                       v2 - (P2[1, :] @ X_h) / (P2[2, :] @ X_h)])
 
     # return np.concatenate((error1**2, error2**2))
-    print(np.sum(error1**2 + error2**2))
     return np.sum(error1**2 + error2**2)

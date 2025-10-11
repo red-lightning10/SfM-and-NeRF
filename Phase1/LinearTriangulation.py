@@ -13,7 +13,6 @@ def homogenize(x):
 
 def create_projection_matrix(K, C, R):
     T = R @ C
-    print(T.shape, R.shape, C.shape)
     P = K @ np.hstack((R, T))
     return P
 
@@ -43,7 +42,6 @@ def LinearTriangulation(K, C_ref, R_ref, C, R, V):
         x = np.array(x)
         X.append(x)
     X = np.vstack(X)
-    print(X)
     # print(X)
 
     return X
