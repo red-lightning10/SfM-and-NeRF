@@ -61,18 +61,6 @@ The pipeline generates:
 - Loss plots during training
 - Rendered images
 
-## Data Structure
-
-```
-Data/
-├── 1.png, 2.png, 3.png, 4.png, 5.png  # Input images for SfM
-├── calibration.txt                     # Camera calibration parameters
-├── matching*.txt                       # Feature matching files
-└── Calibration/                        # Additional calibration images
-    ├── cameraParams.mat
-    └── *.png
-```
-
 ## Results
 
 Results are saved in:
